@@ -14,8 +14,6 @@ namespace ASMEService
             InitializeComponent();
             _shouldLog = string.Equals(ConfigurationManager.AppSettings["log"], "true") ? true : false;
             _timerInterval = Convert.ToDouble(ConfigurationManager.AppSettings["timer"]);
-
-            // _ipCheck = 0;
         }
 
         System.Timers.Timer timer;
@@ -26,7 +24,7 @@ namespace ASMEService
 
         protected override void OnStart(string[] args)
         {
-            WriteToFile("Service is started at " + DateTime.Now);
+            WriteToFile($"Service is started at {DateTime.Now}");
             timer = new System.Timers.Timer(_timerInterval);
             timer.Elapsed += new System.Timers.ElapsedEventHandler(OnElapsedTime);
             timer.Enabled = true;
@@ -34,14 +32,13 @@ namespace ASMEService
 
         private void OnElapsedTime(object source, System.Timers.ElapsedEventArgs e)
         {
-            //WriteToFile("Service recall at " + DateTime.Now);
             if (_getRecords(true) > 0)
                 _getRecords(false);
         }
 
         protected override void OnStop()
         {
-            WriteToFile("Service is stopped at " + DateTime.Now);
+            WriteToFile($"Service is stopped at {DateTime.Now}");
         }
 
         private static uint StrIpToUint(string strIPAddress)
@@ -63,7 +60,10 @@ namespace ASMEService
                 
                 if (devices.Count < 1)
                 {
-                    WriteToFile("No device " + dev);
+                    if (_shouldLog)
+                    {
+                        WriteToFile($"No device {dev}");
+                    }
                     return -1;
                 }
 
@@ -80,32 +80,20 @@ namespace ASMEService
                     };
                     int nRes = asc_SDKAPI.AS_ME_OpenController((int)asc_STU.asc_device_type.AS_ME_TYPE_UNKOWN, ref address, 0,
                             asc_STU.AS_ME_NO_PASSWORD, ref OpenControllerStop, ref m_hController);
+
                     if (nRes < 0)
                     {
-                        WriteToFile("AsmeDevice AS_ME_OpenController " + device.Ip + ": " + nRes);
+                        if (_shouldLog)
+                        {
+                            WriteToFile($"AsmeDevice AS_ME_OpenController {device.Ip} : {nRes}");
+                        }
+
                         return -1;
                     }
 
-                    asc_STU.SYSTEMTIME st = new asc_STU.SYSTEMTIME
-                    {
-                        wYear = (ushort)DateTime.Now.Year,
-                        wMonth = (ushort)DateTime.Now.Month,
-                        wDay = (ushort)DateTime.Now.Day,
-
-                        wHour = (ushort)DateTime.Now.Hour,
-                        wMinute = (ushort)DateTime.Now.Minute,
-                        wSecond = (ushort)DateTime.Now.Second,
-                        wDayOfWeek = (ushort)DateTime.Now.DayOfWeek
-                    };
-
-                    nRes = asc_SDKAPI.AS_ME_SetTime(m_hController, ref st);
-                    if (nRes < 0)
-                        WriteToFile("Setting the Time filed " + nRes);
-
-                    asc_SDKAPI.AS_ME_GetTime(m_hController, ref st);
-
-                    asc_STU.LPAS_ME_RECORDS aRecords = new asc_STU.LPAS_ME_RECORDS(); 
-                    string query = "", leave_time = "";
+                    asc_STU.LPAS_ME_RECORDS aRecords = new asc_STU.LPAS_ME_RECORDS();
+                    var query = string.Empty;
+                    var leave_time = string.Empty;
 
                     while (true)
                     {
@@ -114,15 +102,17 @@ namespace ASMEService
                         {
                             if (_shouldLog)
                             {
-                                WriteToFile("AsmeDevice No records " + nRes);
+                                WriteToFile($"AsmeDevice No records {nRes}");
                             }
                             break;
                         }
 
                         if (aRecords.nCount > 0)
                         {
+
                             for (int i = 0; i < aRecords.nCount; i++)
                             {
+                                query = string.Empty;
                                 switch (aRecords.aEventRecord[i].nType)
                                 {
                                     case 0: // legal card
@@ -131,18 +121,10 @@ namespace ASMEService
                                         aRecords.aEventRecord[i].stStamp.wDay, aRecords.aEventRecord[i].stStamp.wHour,
                                         aRecords.aEventRecord[i].stStamp.wMinute, aRecords.aEventRecord[i].stStamp.wSecond);
 
-                                        query = (dev) ? "insert into reports (employeeid, door_name, status, kirish) " +
-                                                "select employeeid, '" + device.Door + "', 0, '" + leave_time + "' from employee " +
-                                                "where card = '" + aRecords.aEventRecord[i].dw64ID + "'" :
-                                                "select update_reports((select employeeid from employee where card = '" + aRecords.aEventRecord[i].dw64ID +"'),'" + 
-                                                device.Door + "','" + leave_time + "')";
+                                        query = (dev) ? $"insert into reports (employeeid, door_name, status, kirish) values ({aRecords.aEventRecord[i].dw64ID},'{device.Door}', 0, '{leave_time}')" :
+                                                        $"select update_reports({aRecords.aEventRecord[i].dw64ID},'{device.Door}','{leave_time}')";
 
-                                        if (_shouldLog)
-                                        {
-                                            WriteToFile("Query " + query + "     \n" + "Temperature " + aRecords.aEventRecord[i].nBodyTemperature);
-                                        }
-
-                                        InsertDB(query);                                       
+                                        InsertDB(query);
 
                                         break;
 
@@ -152,18 +134,10 @@ namespace ASMEService
                                         aRecords.aEventRecord[i].stStamp.wDay, aRecords.aEventRecord[i].stStamp.wHour,
                                         aRecords.aEventRecord[i].stStamp.wMinute, aRecords.aEventRecord[i].stStamp.wSecond);
 
-                                        query = (dev) ? "insert into reports (employeeid, door_name, status, kirish) " +
-                                            "select employeeid, '" + device.Door + "', 0, '" + leave_time + "' from employee " +
-                                            "where card = '" + aRecords.aEventRecord[i].dw64ID + "'" :
-                                            "select update_reports((select employeeid from employee where card = '" + aRecords.aEventRecord[i].dw64ID + "'),'" +
-                                            device.Door + "','" + leave_time + "')";
+                                        query = (dev) ? $"insert into reports (employeeid, door_name, status, kirish) values ({aRecords.aEventRecord[i].dw64ID},'{device.Door}', 0, '{leave_time}')" :
+                                                        $"select update_reports({aRecords.aEventRecord[i].dw64ID},'{device.Door}','{leave_time}')";
 
-                                        if (_shouldLog)
-                                        {
-                                            WriteToFile("Query " + query + "     \n" + "Temperature " + aRecords.aEventRecord[i].nBodyTemperature);
-                                        }
-
-                                        InsertDB(query);                                       
+                                        InsertDB(query);
 
                                         break;
 
@@ -173,20 +147,8 @@ namespace ASMEService
                                         aRecords.aEventRecord[i].stStamp.wDay, aRecords.aEventRecord[i].stStamp.wHour,
                                         aRecords.aEventRecord[i].stStamp.wMinute, aRecords.aEventRecord[i].stStamp.wSecond);
 
-                                        query = (dev) ? "insert into reports (employeeid, door_name, status, kirish) values ("
-                                            + aRecords.aEventRecord[i].dw64ID + ",'" + device.Door + "', 0, '" + leave_time + "')" :
-                                           "select update_reports(" + aRecords.aEventRecord[i].dw64ID + ",'" + device.Door + "','" +
-                                           leave_time + "')";
-
-                                        if (aRecords.aEventRecord[i].nBodyTemperature > 0)
-                                            InsertDB("insert into temperature (employeeid, temperature, door, sana) values " +
-                                                "(" + aRecords.aEventRecord[i].dw64ID + "," + aRecords.aEventRecord[i].nBodyTemperature +
-                                                ",'" + device.Door + "','" + leave_time + "')");
-
-                                        if (_shouldLog)
-                                        {
-                                            WriteToFile("Query " + query + "     \n" + "Temperature " + aRecords.aEventRecord[i].nBodyTemperature);
-                                        }
+                                        query = (dev) ? $"insert into reports (employeeid, door_name, status, kirish) values ({aRecords.aEventRecord[i].dw64ID},'{device.Door}', 0, '{leave_time}')" :
+                                                        $"select update_reports({aRecords.aEventRecord[i].dw64ID},'{device.Door}','{leave_time}')";
 
                                         InsertDB(query);                                       
 
@@ -198,25 +160,25 @@ namespace ASMEService
                                         aRecords.aEventRecord[i].stStamp.wDay, aRecords.aEventRecord[i].stStamp.wHour,
                                         aRecords.aEventRecord[i].stStamp.wMinute, aRecords.aEventRecord[i].stStamp.wSecond);
 
-                                        query = (dev) ? "insert into reports (employeeid, door_name, status, kirish) values ("
-                                            + aRecords.aEventRecord[i].dw64ID + ",'" + device.Door + "', 0, '" + leave_time + "')" :
-                                           "select update_reports(" + aRecords.aEventRecord[i].dw64ID + ",'" + device.Door + "','" +
-                                           leave_time + "')";
+                                        query = (dev) ? $"insert into reports (employeeid, door_name, status, kirish) values ({aRecords.aEventRecord[i].dw64ID},'{device.Door}', 0, '{leave_time}')" :
+                                                        $"select update_reports({aRecords.aEventRecord[i].dw64ID},'{device.Door}','{leave_time}')";
 
-                                        if (_shouldLog)
-                                        {
-                                            WriteToFile("Query " + query);
-                                        }
-
-                                        InsertDB(query);                                       
+                                        InsertDB(query);
 
                                         break;
+
                                     default:
+
                                         if (_shouldLog)
                                         {
-                                            WriteToFile("Illegal Face / Finger " + aRecords.aEventRecord[i].dw64ID);
+                                            WriteToFile($"Illegal Face / Finger {aRecords.aEventRecord[i].dw64ID}");
                                         }
                                         break;
+                                }
+
+                                if (_shouldLog)
+                                {
+                                    WriteToFile($"LegalFinger, query: {query}");
                                 }
                             }
                         }
@@ -225,15 +187,13 @@ namespace ASMEService
                             break;
                         }
                     }
-                    //System.Runtime.InteropServices.Marshal.FreeHGlobal(infosIntptr);
-                    //WriteToFile("Cleared device: " + device.Ip + "  dev:" + dev);
                     asc_SDKAPI.AS_ME_CloseController(m_hController);
                     m_hController = IntPtr.Zero;
                 }
             }
             catch (Exception msg)
             {
-                WriteToFile("Exception: " + msg.ToString());
+                WriteToFile($"Exception: {msg.ToString()}");
                 if(m_hController != IntPtr.Zero)
                 {
                     asc_SDKAPI.AS_ME_CloseController(m_hController);
@@ -246,12 +206,12 @@ namespace ASMEService
 
         public void WriteToFile(string Message)
         {
-            string path = AppDomain.CurrentDomain.BaseDirectory + "\\Logs";
+            string path = $"{AppDomain.CurrentDomain.BaseDirectory}\\Logs";
             if (!System.IO.Directory.Exists(path))
             {
                 System.IO.Directory.CreateDirectory(path);
             }
-            string filepath = AppDomain.CurrentDomain.BaseDirectory + "\\Logs\\ServiceLog_" + DateTime.Now.ToString("yyyy-MM-dd") + ".txt";
+            string filepath = $"{AppDomain.CurrentDomain.BaseDirectory}\\Logs\\ServiceLog_{DateTime.Now.ToString("yyyy-MM-dd")}.txt";
             if (!System.IO.File.Exists(filepath))
             {
                 // Create a file to write to.   
