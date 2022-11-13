@@ -167,6 +167,18 @@ namespace ASMEService
 
                                         break;
 
+                                    case 4:
+                                        leave_time = string.Format(("{0:d}-{1:d2}-{2:d2} {3:d2}:{4:d2}:{5:d2}"),
+                                        aRecords.aEventRecord[i].stStamp.wYear, aRecords.aEventRecord[i].stStamp.wMonth,
+                                        aRecords.aEventRecord[i].stStamp.wDay, aRecords.aEventRecord[i].stStamp.wHour,
+                                        aRecords.aEventRecord[i].stStamp.wMinute, aRecords.aEventRecord[i].stStamp.wSecond);
+
+                                        query = $"insert into guest (door_name, kirish) values ('{device.Door}','{leave_time}')";
+
+                                        InsertDB(query);
+
+                                        break;
+
                                     default:
 
                                         if (_shouldLog)
@@ -178,7 +190,7 @@ namespace ASMEService
 
                                 if (_shouldLog)
                                 {
-                                    WriteToFile($"LegalFinger, query: {query}");
+                                    WriteToFile($"device ip: {device.Ip} , query: {query}");
                                 }
                             }
                         }
